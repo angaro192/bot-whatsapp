@@ -1,0 +1,15 @@
+{
+  "name": "bot-whatsapp",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "nodemon": "nodemon index.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@adiwajshing/baileys": "^4.1.0",
+    "pino": "^8.0.0",
+    "qrcode": "^1.5.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
