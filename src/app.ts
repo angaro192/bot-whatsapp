@@ -1,14 +1,55 @@
-const makeWaSocket =  require('@adiwajshing/baileys').default
-const { delay, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@adiwajshing/baileys')
-const { unlink, existsSync, mkdirSync } = require('fs')
-const P = require('pino')
+import express, { Express, Request, Response } from 'express';
+import makeWaSocket from '@adiwajshing/baileys';
+import { delay, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@adiwajshing/baileys';
+import dotenv from 'dotenv';
+import socket from 'socket.io';
+import http from 'http';
+import { unlink, existsSync, mkdirSync } from 'fs';
+import fs from 'fs';
+import QrCode from 'qrcode';
+import P from 'pino';
+import path from 'path';
+
+dotenv.config();
 const ArfaPath = './ArfaSessions/'
 const ArfaAuth = 'auth_info.json'
-const fs = require('fs')
-const tempoBot = 10000
 
-const QrCode = require("qrcode")
+const app: Express = express();
+app.use(express.static(__dirname + '/../public'));
+app.use(express.static(__dirname));
+app.set('view engine', 'ejs');
+const port = process.env.PORT || 5500;
+const httpServer = http.createServer(app);
 
+const io = socket(httpServer, {
+    path: '/socket.io',
+});
+
+app.get('/qr', (req: Request, res: Response) => {
+    // const qr = req.query.qr || '';
+    // for (const item of clientes) {
+    //     item.emit('chegou-qr', qr);
+    // }
+    // res.status(200).json({
+    //     ok: true
+    // })
+    res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+const clientes: Array<any> = [];
+
+io.on('connection', (socket) => {
+    console.log(`Cliente conectado: ${socket.id}`);
+    clientes.push(socket);
+    //ARFAConnection(socket);
+
+    socket.on('disconnect', () => {
+        clientes.slice(clientes.indexOf(socket), 1);
+        console.log(`Cliente desconectado: ${socket.id}`);
+    });
+});
+
+// Configurações do bot
 const dirBot = './bot'
 if(!fs.existsSync(dirBot)){
     fs.mkdirSync(dirBot)
@@ -19,14 +60,15 @@ const ARFAGroupCheck = (jid) => {
     return regexp.test(jid)
 }
 
-function exportQR(qrCode, path) {
+function exportQR (qrCode: any, path: any, socket: any) {
+    const dumpQrCode = qrCode;
     qrCode = qrCode.replace('data:image/png;base64,', '');
     const imageBuffer = Buffer.from(qrCode, 'base64');
     fs.writeFileSync(path, imageBuffer);
-    //io.sockets.emit("qrcode "+user_id, chat_id);      
- }
+    socket.emit('chegou-qr', dumpQrCode)
+}
 
-const ARFAUpdate = (ARFAsock) => {
+const ARFAUpdate = (ARFAsock, socket) => {
     const date = new Date(); // Start date
     const moment = date.getTime(); // Get TimeStamp
     ARFAsock.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
@@ -34,7 +76,7 @@ const ARFAUpdate = (ARFAsock) => {
         console.log(connection)
         if(qr){
             const base64Qr = await QrCode.toDataURL(qr)
-            exportQR(base64Qr, `public/qr/${moment}.png`);
+            exportQR(base64Qr, `public/qr/${moment}.png`, socket);
             console.log("BOT-ARFA-WHATSAPP - QrCode: ", qr)
         }
         if(connection === 'close') {
@@ -54,7 +96,7 @@ const ARFAUpdate = (ARFAsock) => {
     })
 }
 
-const ARFAConnection = async () => {
+const ARFAConnection = async (socket) => {
     const { version } = await fetchLatestBaileysVersion()
     if(!existsSync(ArfaPath)) {
         mkdirSync(ArfaPath, {recursive: true})
@@ -72,7 +114,7 @@ const ARFAConnection = async () => {
         },
     }
     const ARFAsock = makeWaSocket(config)
-    ARFAUpdate(ARFAsock.ev)
+    ARFAUpdate(ARFAsock.ev, socket)
     ARFAsock.ev.on('creds.update', saveState)
     const ARFASendMessage = async (jid, msg) => {
         await ARFAsock.presenceSubscribe(jid)
@@ -139,4 +181,7 @@ const ARFAConnection = async () => {
     })
 }
 
-ARFAConnection()
+httpServer.listen(port, () => {
+    console.log(`🛠️ [SERVER]: Server is running at http://localhost:${port}`);
+    
+});
